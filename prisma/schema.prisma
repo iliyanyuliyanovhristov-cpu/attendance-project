@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String  @id @default(uuid())
+  email        String  @unique
+  passwordHash String?
+  role         String
+  name         String?
+  fullName     String?
+
+  // Kullanıcının admin olarak bağlı olduğu şirketler (CompanyUser pivot)
+  companyLinks CompanyUser[] @relation("UserCompany")
+
+  // Kullanıcının sahibi olduğu cihazlar
+  ownedDevices Device[] @relation("UserDevices")
+}
+
+model Company {
+  id   String @id @default(uuid())
+  name String @unique
+
+  employees Employee[]
+  devices   Device[]
+
+  // Şirkete bağlı admin/user ilişkileri (CompanyUser pivot)
+  companyLinks  CompanyUser[]   @relation("CompanyUsers")
+  AttendanceLog AttendanceLog[]
+  EquipmentLog  EquipmentLog[]
+}
+
+model CompanyUser {
+  id String @id @default(uuid())
+
+  // ---- TARAF 1: User
+  user   User   @relation("UserCompany", fields: [userId], references: [id])
+  userId String
+
+  // ---- TARAF 2: Company
+  company   Company @relation("CompanyUsers", fields: [companyId], references: [id])
+  companyId String
+
+  // Aynı kullanıcı aynı şirkete bir kez atanabilsin
+  @@unique([userId, companyId])
+}
+
+model Device {
+  id           String   @id @default(uuid())
+  company      Company  @relation(fields: [companyId], references: [id])
+  companyId    String
+  tabletNumber String
+  passwordHash String
+  apiKey       String   @unique
+  lastSeen     DateTime @default(now())
+
+  // Cihaz sahibinin ilişkisi (opsiyonel)
+  ownerUser    User?          @relation("UserDevices", fields: [ownerUserId], references: [id])
+  ownerUserId  String?
+  EquipmentLog EquipmentLog[]
+}
+
+model Employee {
+  id            String          @id @default(uuid())
+  firstName     String
+  lastName      String
+  company       Company         @relation(fields: [companyId], references: [id])
+  companyId     String
+  isActive      Boolean         @default(true)
+  AttendanceLog AttendanceLog[]
+}
+
+model AttendanceLog {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId String
+  company    Company  @relation(fields: [companyId], references: [id])
+  companyId  String
+  action     String
+  timestamp  DateTime @default(now())
+  recordedBy String
+}
+
+model EquipmentLog {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+  deviceId  String? // hangi tablet göndermişse
+  device    Device? @relation(fields: [deviceId], references: [id])
+
+  name      String // Buzdolabı, Klima vb.
+  parameter String // Sıcaklık, Nem, Volt vb.
+  value     String // 3 °C, 220V, Açık vb.
+
+  recordedBy String // "tablet-T1" veya "admin-panel"
+  timestamp  DateTime @default(now())
+
+  @@index([companyId, timestamp])
+}
